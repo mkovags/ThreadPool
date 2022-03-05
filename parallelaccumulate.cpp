@@ -5,7 +5,10 @@
 class ParallelAccumulate : public testing::Test
 {
 public:
-  ParallelAccumulate() { mThreadPool = std::make_unique<ThreadPool>(24, true); }
+  ParallelAccumulate()
+  {
+    mThreadPool = std::make_unique<ThreadPool>(24, true);
+  }
   ~ParallelAccumulate() {}
 
   void SetUp() override {}

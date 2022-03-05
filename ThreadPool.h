@@ -140,22 +140,24 @@ private:
     while (true) {
       FunctionWrapper task;
       std::unique_lock lk{ mMutex };
-      if (tryPop(task)) {
+      mWaitForTasks.wait(
+        lk, [this]() -> bool { return !mWorkQueue.empty() || mDone; });
+
+      if (mDone && (mWorkQueue.empty() || !mWaitForAllTasksToFinish)) {
+        break;
+      }
+
+      while (tryPop(task)) {
         lk.unlock();
         task();
         lk.lock();
+      }
+
+      if (yieldCounter >= cMaxYielding) {
+        yieldCounter = 0;
       } else {
-        if (yieldCounter >= cMaxYielding) {
-          mWaitForTasks.wait(
-            lk, [this]() -> bool { return !mWorkQueue.empty() || mDone; });
-          if (mDone && (mWorkQueue.empty() || !mWaitForAllTasksToFinish)) {
-            break;
-          }
-          yieldCounter = 0;
-        } else {
-          ++yieldCounter;
-          std::this_thread::yield();
-        }
+        ++yieldCounter;
+        std::this_thread::yield();
       }
     }
     mWaitForTasks.notify_all();
