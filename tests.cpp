@@ -24,7 +24,7 @@ protected:
 TEST_F(TestThreadPool, IncrementsALot)
 {
 	auto threadPool = std::make_unique<ThreadPool>();
-	std::atomic<int> mCounter;
+	std::atomic<int> mCounter {0};
 
 	const auto threadsToSpawn {200};
 		for(int i = 0; i!=threadsToSpawn; ++i) {
