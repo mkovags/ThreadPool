@@ -19,4 +19,14 @@ target_link_libraries(tests
     PRIVATE pthread
 )
 
+add_executable(parallelaccumulate
+	parallelaccumulate.cpp
+)
+
+target_link_libraries(parallelaccumulate
+	PRIVATE gtest
+	PRIVATE pthread
+)
+
 gtest_discover_tests(tests)
+gtest_discover_tests(parallelaccumulate)

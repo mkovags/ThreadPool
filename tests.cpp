@@ -2,16 +2,16 @@
 #include <gtest/gtest.h>
 #include <unordered_set>
 
-class TestThreadPool : public testing::Test
+class ThreadPoolTest : public testing::Test
 {
 public:
-  TestThreadPool()
+  ThreadPoolTest()
   {
     mThreadPool =
       std::make_unique<ThreadPool>(std::thread::hardware_concurrency(), true);
   }
 
-  ~TestThreadPool() {}
+  ~ThreadPoolTest() {}
   void SetUp() override {}
 
   void TearDown() override {}
@@ -24,7 +24,7 @@ protected:
  * Submit a couple of tasks and check if the counter was incremented to the
  * number of tasks submitted
  */
-TEST_F(TestThreadPool, ThreadsCanIncrementCounterSimultaneously)
+TEST_F(ThreadPoolTest, ThreadsCanIncrementCounterSimultaneously)
 {
   std::atomic<int> mCounter{ 0 };
 
@@ -40,7 +40,7 @@ TEST_F(TestThreadPool, ThreadsCanIncrementCounterSimultaneously)
 /*
  * Submit one task, check if the future holds the correct value
  */
-TEST_F(TestThreadPool, RetunsCorrectResultsOnTheFuture)
+TEST_F(ThreadPoolTest, RetunsCorrectResultsOnTheFuture)
 {
   const auto expectedValue{ 666 };
   auto fut = mThreadPool->submit([]() -> int { return expectedValue; });
@@ -79,8 +79,7 @@ TEST(NoFixture_TestThreadPool, ThreadQueueUsesAllThreadsToProcessTasks)
   ASSERT_EQ(counter.size(), numThreads);
 }
 
-int
-main(int argc, char** argv)
+int main(int argc, char** argv)
 {
   testing::InitGoogleTest(&argc, argv);
   auto ret = RUN_ALL_TESTS();

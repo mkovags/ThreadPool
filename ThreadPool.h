@@ -7,6 +7,9 @@
 #include <queue>
 #include <thread>
 
+#ifndef THREAD_POOL_H
+#define THREAD_POOL_H
+
 class FunctionWrapper
 {
   struct ImplBase
@@ -111,9 +114,8 @@ public:
   {
     std::unique_lock lk{ mMutex };
     mDone = true;
-    lk.unlock();
-
     mWaitForTasks.notify_one();
+    lk.unlock();
     for (auto& thread : mThreads) {
       if (thread.joinable()) {
         thread.join();
@@ -177,3 +179,5 @@ private:
   /// it "sleeps" by waiting on a CV
   static constexpr auto cMaxYielding{ 500 };
 };
+
+#endif
