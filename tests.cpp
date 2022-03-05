@@ -60,7 +60,7 @@ TEST_F(TestThreadPool, RetunsCorrectResultsOnTheFuture)
  * Spawn a lot of tasks, get their thread IDs and count how many thread IDs we got
  * If it's the same as the threads running on the queue, then the thread queue is using all the threads
  * to process the tasks that are submitted
- * Although unlikely, this test can spuriously fail in theory
+ * Although unlikely, this test can spuriously fail
  */
 TEST(NoFixture_TestThreadPool, ThreadQueueUsesAllThreadsToProcessTasks)
 {

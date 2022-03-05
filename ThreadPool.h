@@ -155,12 +155,14 @@ public:
 		std::packaged_task<ResultType()> task{std::move(f)};
 		std::future<ResultType> res{task.get_future()};
 		mWorkQueue.push(std::move(task));
+		mWaitForTasks.notify_one();
 		return res;
 	}
 
 	~ThreadPool()
 	{
 		mDone.store(true);
+		mWaitForTasks.notify_one();
 		for (auto &t: mThreads) {
 			if (t.joinable()) {
 				t.join();
@@ -171,18 +173,23 @@ public:
 private:
 	void workerThread()
 	{
-		while (!mDone) {
+		while (!(mDone && mWorkQueue.empty())) {
 			FunctionWrapper task;
 			if (mWorkQueue.tryPop(task)) {
 				task();
 			}
 			else {
-				std::this_thread::yield();
+				std::unique_lock lk {mCVMutex};
+				mWaitForTasks.wait(lk);
 			}
 		}
+		mWaitForTasks.notify_all();
 	}
 
 	std::atomic_bool mDone;
 	ThreadSafeQueue<FunctionWrapper> mWorkQueue;
 	std::vector<std::thread> mThreads;
+
+	mutable std::mutex mCVMutex;
+	std::condition_variable mWaitForTasks;
 };
