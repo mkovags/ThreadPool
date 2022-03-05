@@ -140,11 +140,14 @@ private:
     while (true) {
       FunctionWrapper task;
       std::unique_lock lk{ mMutex };
-      mWaitForTasks.wait(
-        lk, [this]() -> bool { return !mWorkQueue.empty() || mDone; });
 
-      if (mDone && (mWorkQueue.empty() || !mWaitForAllTasksToFinish)) {
-        break;
+      if(yieldCounter>=cMaxYielding) {
+        mWaitForTasks.wait(
+          lk, [this]() -> bool { return !mWorkQueue.empty() || mDone; });
+
+        if (mDone && (mWorkQueue.empty() || !mWaitForAllTasksToFinish)) {
+          break;
+        }
       }
 
       while (tryPop(task)) {
@@ -153,12 +156,9 @@ private:
         lk.lock();
       }
 
-      if (yieldCounter >= cMaxYielding) {
-        yieldCounter = 0;
-      } else {
-        ++yieldCounter;
-        std::this_thread::yield();
-      }
+      lk.unlock();
+      ++yieldCounter;
+      std::this_thread::yield();
     }
     mWaitForTasks.notify_all();
   }
@@ -179,7 +179,7 @@ private:
   std::condition_variable mWaitForTasks;
   /// The thread loop will yield execution until this maximum was reached, then
   /// it "sleeps" by waiting on a CV
-  static constexpr auto cMaxYielding{ 500 };
+  static constexpr auto cMaxYielding{ 100 };
 };
 
 #endif
