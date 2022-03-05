@@ -1,46 +1,40 @@
+#include "ThreadPool.h"
 #include <gtest/gtest.h>
 #include <unordered_set>
-#include "ThreadPool.h"
 
-class TestThreadPool: public testing::Test
+class TestThreadPool : public testing::Test
 {
 public:
-	TestThreadPool()
-	{
-		mThreadPool = std::make_unique<ThreadPool>(std::thread::hardware_concurrency(), true);
-	}
+  TestThreadPool()
+  {
+    mThreadPool =
+      std::make_unique<ThreadPool>(std::thread::hardware_concurrency(), true);
+  }
 
-	~TestThreadPool()
-	{
+  ~TestThreadPool() {}
+  void SetUp() override {}
 
-	}
-	void SetUp() override
-	{}
-
-	void TearDown() override
-	{}
+  void TearDown() override {}
 
 protected:
-	std::unique_ptr<ThreadPool> mThreadPool;
+  std::unique_ptr<ThreadPool> mThreadPool;
 };
 
 /*
- * Submit a couple of tasks and check if the counter was incremented to the number of tasks submitted
+ * Submit a couple of tasks and check if the counter was incremented to the
+ * number of tasks submitted
  */
 TEST_F(TestThreadPool, ThreadsCanIncrementCounterSimultaneously)
 {
-	std::atomic<int> mCounter{0};
+  std::atomic<int> mCounter{ 0 };
 
-	const auto threadsToSpawn{200};
-	for (int i = 0; i != threadsToSpawn; ++i) {
-		mThreadPool->submit([&]()
-		                    {
-			                    ++mCounter;
-		                    });
-	}
+  const auto threadsToSpawn{ 200 };
+  for (int i = 0; i != threadsToSpawn; ++i) {
+    mThreadPool->submit([&]() { ++mCounter; });
+  }
 
-	mThreadPool = nullptr;
-	ASSERT_EQ(mCounter, threadsToSpawn);
+  mThreadPool = nullptr;
+  ASSERT_EQ(mCounter, threadsToSpawn);
 }
 
 /*
@@ -48,47 +42,47 @@ TEST_F(TestThreadPool, ThreadsCanIncrementCounterSimultaneously)
  */
 TEST_F(TestThreadPool, RetunsCorrectResultsOnTheFuture)
 {
-	const auto expectedValue{666};
-	auto fut = mThreadPool->submit([]() -> int
-	                               { return expectedValue; });
-	mThreadPool = nullptr;
+  const auto expectedValue{ 666 };
+  auto fut = mThreadPool->submit([]() -> int { return expectedValue; });
+  mThreadPool = nullptr;
 
-	ASSERT_EQ(fut.get(), expectedValue);
+  ASSERT_EQ(fut.get(), expectedValue);
 }
 
 /*
- * Spawn a lot of tasks, get their thread IDs and count how many thread IDs we got
- * If it's the same as the threads running on the queue, then the thread queue is using all the threads
- * to process the tasks that are submitted
+ * Spawn a lot of tasks, get their thread IDs and count how many thread IDs we
+ * got If it's the same as the threads running on the queue, then the thread
+ * queue is using all the threads to process the tasks that are submitted
  * Although unlikely, this test can spuriously fail
  */
 TEST(NoFixture_TestThreadPool, ThreadQueueUsesAllThreadsToProcessTasks)
 {
-	constexpr auto numTasks{1000};
-	constexpr auto numThreads{3};
-	std::vector<std::future<std::thread::id>> results;
-	results.reserve(numTasks);
-	auto threadPool = std::make_unique<ThreadPool>(numThreads, true);
+  constexpr auto numTasks{ 1000 };
+  constexpr auto numThreads{ 3 };
+  std::vector<std::future<std::thread::id>> results;
+  results.reserve(numTasks);
+  auto threadPool = std::make_unique<ThreadPool>(numThreads, true);
 
-	for (int i = 0; i != numTasks; ++i) {
-		auto fut = threadPool->submit([]() -> auto
-		                              { return std::this_thread::get_id(); });
-		results.push_back(std::move(fut));
-	}
+  for (int i = 0; i != numTasks; ++i) {
+    auto fut =
+      threadPool->submit([]() -> auto { return std::this_thread::get_id(); });
+    results.push_back(std::move(fut));
+  }
 
-	threadPool = nullptr;
+  threadPool = nullptr;
 
-	std::unordered_set<std::thread::id> counter;
-	for (auto &fut: results) {
-		counter.emplace(fut.get());
-	}
+  std::unordered_set<std::thread::id> counter;
+  for (auto& fut : results) {
+    counter.emplace(fut.get());
+  }
 
-	ASSERT_EQ(counter.size(), numThreads);
+  ASSERT_EQ(counter.size(), numThreads);
 }
 
-int main(int argc, char **argv)
+int
+main(int argc, char** argv)
 {
-	testing::InitGoogleTest(&argc, argv);
-	auto ret = RUN_ALL_TESTS();
-	return ret;
+  testing::InitGoogleTest(&argc, argv);
+  auto ret = RUN_ALL_TESTS();
+  return ret;
 }
