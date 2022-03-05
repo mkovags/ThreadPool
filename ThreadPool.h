@@ -7,82 +7,6 @@
 #include <thread>
 #include <future>
 
-template<typename T>
-class ThreadSafeQueue
-{
-	mutable std::mutex mMutex;
-	std::queue<T> mQueue;
-	std::condition_variable mDataCond;
-
-public:
-	ThreadSafeQueue(const std::queue<T> &mQueue)
-		: mQueue{mQueue}
-	{}
-
-	ThreadSafeQueue()
-		: mQueue{}
-	{}
-
-	void push(T newValue)
-	{
-		std::unique_lock<std::mutex> lk{mMutex};
-		mQueue.push(std::move(newValue));
-		mDataCond.notify_one();
-	}
-
-	void waitAndPop(T &value)
-	{
-		std::unique_lock<std::mutex> lk{mMutex};
-		mDataCond.wait(lk, [this]()
-		{
-			return !mQueue.empty();
-		});
-		value = std::move(mQueue.front());
-		mQueue.pop();
-	}
-
-	std::shared_ptr<T> waitAndPop()
-	{
-		std::unique_lock<std::mutex> lk{mMutex};
-		mDataCond.wait(lk, [this]()
-		{
-			return !mQueue.empty();
-		});
-
-		auto res{std::make_shared<T>(std::move(mQueue.front()))};
-		mQueue.pop();
-		return res;
-	}
-
-	bool tryPop(T &value)
-	{
-		std::unique_lock<std::mutex> lk{mMutex};
-		if (mQueue.empty()) {
-			return false;
-		}
-		value = std::move(mQueue.front());
-		mQueue.pop();
-		return true;
-	}
-
-	std::shared_ptr<T> tryPop()
-	{
-		std::unique_lock<std::mutex> lk{mMutex};
-		if (mQueue.empty()) {
-			return nullptr;
-		}
-		auto res{std::make_shared<T>(std::move(mQueue.front()))};
-		mQueue.pop();
-		return res;
-	}
-
-	bool empty() const
-	{
-		std::unique_lock<std::mutex> lk{mMutex};
-		return mQueue.empty();
-	}
-};
-
 class FunctionWrapper
 {
 	struct ImplBase
@@ -116,6 +40,7 @@ public:
 	FunctionWrapper(FunctionWrapper &&rhs)
 		: mImpl{std::move(rhs.mImpl)}
 	{}
+
 	FunctionWrapper &operator=(FunctionWrapper &&rhs)
 	{
 		mImpl = std::move(rhs.mImpl);
@@ -132,18 +57,21 @@ public:
 class ThreadPool
 {
 public:
-	ThreadPool(unsigned numThreads = std::thread::hardware_concurrency())
+	ThreadPool(unsigned numThreads = std::thread::hardware_concurrency(), bool waitForAllTasksToFinish = false)
 		:
-		mDone{false}
+		mDone{false},
+		mWaitForAllTasksToFinish{waitForAllTasksToFinish}
 	{
-		const auto cThreadCount{numThreads};
+		mThreads.reserve(numThreads);
 		try {
-			for (unsigned i = 0; i != cThreadCount; ++i) {
+			for (unsigned i = 0; i != numThreads; ++i) {
 				mThreads.push_back(std::thread(&ThreadPool::workerThread, this));
 			}
 		}
 		catch (...) {
-			mDone.store(true);
+			std::unique_lock lk{mMutex};
+			mDone = true;
+			mWaitForTasks.notify_all();
 			throw;
 		}
 	}
@@ -154,6 +82,7 @@ public:
 		typedef typename std::result_of<FunctionType()>::type ResultType;
 		std::packaged_task<ResultType()> task{std::move(f)};
 		std::future<ResultType> res{task.get_future()};
+		std::unique_lock lk{mMutex};
 		mWorkQueue.push(std::move(task));
 		mWaitForTasks.notify_one();
 		return res;
@@ -161,7 +90,10 @@ public:
 
 	~ThreadPool()
 	{
-		mDone.store(true);
+		std::unique_lock lk{mMutex};
+		mDone = true;
+		lk.unlock();
+
 		mWaitForTasks.notify_one();
 		for (auto &t: mThreads) {
 			if (t.joinable()) {
@@ -169,27 +101,54 @@ public:
 			}
 		}
 	}
-
 private:
+
+	bool tryPop(FunctionWrapper &value)
+	{
+		//std::unique_lock<std::mutex> lk{mMutex};
+		if (mWorkQueue.empty()) {
+			return false;
+		}
+		value = std::move(mWorkQueue.front());
+		mWorkQueue.pop();
+		return true;
+	}
+
 	void workerThread()
 	{
-		while (!(mDone && mWorkQueue.empty())) {
+		unsigned yieldCounter;
+		while (true) {
 			FunctionWrapper task;
-			if (mWorkQueue.tryPop(task)) {
+			std::unique_lock lk{mMutex};
+			if (tryPop(task)) {
+				lk.unlock();
 				task();
+				lk.lock();
 			}
 			else {
-				std::unique_lock lk {mCVMutex};
-				mWaitForTasks.wait(lk);
+				if (yieldCounter >= cMaxYielding) {
+					mWaitForTasks.wait(lk, [this]() -> bool
+					{
+						return !mWorkQueue.empty() || mDone;
+					});
+					if (mDone && (mWorkQueue.empty() || !mWaitForAllTasksToFinish)) {
+						break;
+					}
+				}
+				else {
+					++yieldCounter;
+					std::this_thread::yield();
+				}
 			}
 		}
 		mWaitForTasks.notify_all();
 	}
 
-	std::atomic_bool mDone;
-	ThreadSafeQueue<FunctionWrapper> mWorkQueue;
+	bool mDone;
+	bool mWaitForAllTasksToFinish;
+	std::queue<FunctionWrapper> mWorkQueue;
 	std::vector<std::thread> mThreads;
-
-	mutable std::mutex mCVMutex;
+	mutable std::mutex mMutex;
 	std::condition_variable mWaitForTasks;
+	static constexpr auto cMaxYielding{500};
 };

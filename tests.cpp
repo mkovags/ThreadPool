@@ -7,7 +7,7 @@ class TestThreadPool: public testing::Test
 public:
 	TestThreadPool()
 	{
-		mThreadPool = std::make_unique<ThreadPool>();
+		mThreadPool = std::make_unique<ThreadPool>(std::thread::hardware_concurrency(), true);
 	}
 
 	~TestThreadPool()
@@ -68,7 +68,7 @@ TEST(NoFixture_TestThreadPool, ThreadQueueUsesAllThreadsToProcessTasks)
 	constexpr auto numThreads{3};
 	std::vector<std::future<std::thread::id>> results;
 	results.reserve(numTasks);
-	auto threadPool = std::make_unique<ThreadPool>(numThreads);
+	auto threadPool = std::make_unique<ThreadPool>(numThreads, true);
 
 	for (int i = 0; i != numTasks; ++i) {
 		auto fut = threadPool->submit([]() -> auto
